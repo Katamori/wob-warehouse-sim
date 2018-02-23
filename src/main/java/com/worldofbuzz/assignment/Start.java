@@ -1,9 +1,10 @@
 package com.worldofbuzz.assignment;
 
 import com.opencsv.CSVWriter;
+import org.apache.commons.net.ftp.FTPClient;
+import org.apache.commons.net.ftp.FTPFile;
 
-import java.io.FileInputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.sql.Connection;
@@ -31,15 +32,22 @@ public class Start {
 
     public static void main(String[] args) {
 
+        //strings
+        String CSVFilename = "report_"+dateFormat.format(today)+".csv";
         String getSKU =
             "SELECT sku_data.*, sku_data.barcode, COUNT(sku_data.SKU)AS amount " +
             "FROM " +
             "(inventory INNER JOIN sku_data ON inventory.SKU = sku_data.SKU) " +
             "GROUP BY sku_data.SKU";
 
+        //FTP
+        FTPClient ftpclient = new FTPClient();
+        InputStream is = null;
+
+
         try(
             CSVWriter writer = new CSVWriter(
-                Files.newBufferedWriter(Paths.get("./report_"+dateFormat.format(today)+".csv")),
+                Files.newBufferedWriter(Paths.get("./"+CSVFilename)),
                 '\t',
                 '"',
                 CSVWriter.DEFAULT_ESCAPE_CHARACTER,
@@ -66,11 +74,37 @@ public class Start {
                     rs.getString("barcode") });
             }
 
-            System.out.println();
+            System.out.println("CSV has been generated");
+
+
 
         } catch (IOException | SQLException | ParseException e) {
             e.printStackTrace();
         }
+
+        //FTP
+        try {
+            ftpclient.connect(props.getProperty("ftpaddress"));
+            ftpclient.login(props.getProperty("ftplogin"), props.getProperty("ftppw"));
+            is = new FileInputStream("./"+CSVFilename);
+            ftpclient.storeFile(CSVFilename, is);
+            ftpclient.logout();
+        } catch (IOException e) {
+                e.printStackTrace();
+        } finally {
+            try {
+                if (is != null) {
+                    System.out.println("CSV uploaded to " + props.getProperty("ftpaddress"));
+                    is.close();
+                }
+                ftpclient.disconnect();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+
+
     }
 
 
@@ -112,10 +146,6 @@ public class Start {
 
         // Get diff in msec and "convert" to days
         long diff = (today.getTime() - oldest.getTime()) / (1000 * 60 * 60 * 24);
-
-        System.out.println(today);
-        System.out.println(oldest);
-        System.out.println(diff);
 
         double multiplier;
 
